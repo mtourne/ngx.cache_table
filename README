@@ -1,0 +1,116 @@
+Name
+====
+
+ngx.cache_table - Simple Lua table with a ngx_lua caching layer.
+
+Description
+===========
+
+This Lua library adds caching to Lua tables for ngx_lua, and ngx_openresty
+
+http://wiki.nginx.org/HttpLuaModule
+
+https://github.com/agentzh/ngx_openresty
+
+Synopsis
+========
+
+    lua_package_path    "/path/to/cache_table.lua;;";
+
+    lua_shared_dict     cached_sessions     20M;
+
+    server {
+        location /test {
+            content_by_lua '
+
+            local cjson = require("cjson")
+
+            local ip = 'xx.xx.xx.xx'
+
+            local my_table = { ip = ip, session = "foo" }
+            my_table = cache_table:new(60, ngx.shared.cached_sessions, my_table)
+
+            -- load the table from shared_memory
+            local my_table_cached = my_table:load("key")
+
+            if my_table_cached then
+               my_table = my_table_cached
+            else
+
+               -- cache MISS, refresh from memc, myslq, etc
+               local memcached = require("resty.memcached")
+               local memc, err = memcached:new()
+
+               local ok, err = memc:connect("127.0.0.1", 11211)
+
+               local res, flags, err = memc:get("session-" .. ip )
+
+               my_table.ip = ip
+               my_table.sesion = res
+
+               -- save the table to shared memory
+               my_table:save("key")
+            end
+
+            -- encode to json like a normal table
+            ngx.say(cjson.encode(my_table))
+
+            ';
+        }
+    }
+
+
+Methods
+=======
+
+new
+---
+**syntax:** *cached_table, err = cache_table:new(ttl, shared_dict, base_table? opts?)*
+
+Creates a cache_table
+
+A cache_table provides methods, but is otherwise a full Lua table. Since it can't change the table itself, cached_table:load() returns a new cache_table
+
+`ttl` caching_time set by save()
+`shared_dict` a ngx.shared.DICT, declared in nginx.conf
+
+If a bad shared_dict (undeclared in nginx.conf), the cache_table can't cache properly
+and `err` will be set in the return
+
+Optionally accepts `base_table`, and an `opts` table argument.
+
+`opts.failed_ttl` will be used as to cache an "empty_entry",
+when `cache_table:save(key, false)` is called
+
+
+Common idiom :
+
+    local table = { key = "value" }
+    table = cache_table:new(ttl, shared_dict, table)
+
+    local cached_table = table:load(key)
+
+
+load
+----
+**syntax:** *cached_table = cache_table:load(key)*
+
+Loads the table from a Ngx shared_memory, using `key`.
+
+-- TODO (mtourne): change
+It returns the loaded cached_table full, or `nil`
+
+
+save
+----
+**syntax:** *cached_table = cache_table:save(key, good_lookup=true?)*
+
+Saves the table from a Ngx shared_memory, using `key`.
+
+-- TODO (mtourne): clarify
+By default `good_lookup` is true. Optionally this can be set to false
+to cache "empty_entries using `opts.failed_ttl`
+
+See Also
+========
+* the ngx_lua module: http://wiki.nginx.org/HttpLuaModule
