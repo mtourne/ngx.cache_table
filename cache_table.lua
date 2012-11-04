@@ -14,8 +14,7 @@
 -- local my_table = { ip = 'xx.xx.xx.xx', session = "foo" }
 -- my_table = cache_table:new(60, ngx.shared.cached_sessions, my_table)
 
--- local my_table_cached = my_table:load("key")
-
+-- local my_table, cached = my_table:load("key")
 
 -- *Note:* this means that "self" is itself a table,
 --    and self:load cannot change self itself.
@@ -23,14 +22,12 @@
 
 module("cache_table", package.seeall)
 
-local conf = require("conf")
 local cmsgpack = require("cmsgpack")
 
 -- Control caching for failed lookups
-local DEFAULT_FAILED_LOOKUP_CACHE_TTL = (
-   conf.DEFAULT_FAILED_LOOKUP_CACHE_TTL or 10)
+local DEFAULT_FAILED_LOOKUP_CACHE_TTL = 10
 
-local DEBUG = conf.DEBUG or true
+local DEBUG = false
 
 local pack = cmsgpack.pack
 local unpack = cmsgpack.unpack
@@ -99,7 +96,9 @@ function get_shared_dict(self)
    return self:get_internal('shared_dict')
 end
 
--- cache_table:load() returns a new instance
+-- cache_table:load(key)
+-- Loads the table from a shared dict
+-- @returns (loaded table, cached)
 function load(self, key)
    local shared_dict = self:get_shared_dict()
    local serialized = shared_dict:get(key)
@@ -118,10 +117,10 @@ function load(self, key)
       local new_table = self:deserialize(serialized)
       setmetatable(new_table, mt)
 
-      return new_table
+      return new_table, true
    end
 
-   return nil
+   return self, false
 end
 
 -- cache_table:save(key, [lookup_success])
@@ -180,7 +179,6 @@ function _save_off(self, key)
            debug.traceback())
    return nil
 end
-
 
 
 -- safety net

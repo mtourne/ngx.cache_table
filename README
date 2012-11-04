@@ -12,6 +12,14 @@ http://wiki.nginx.org/HttpLuaModule
 
 https://github.com/agentzh/ngx_openresty
 
+
+Requirements
+============
+ * Nginx + lua-nginx-module
+ * LuaJIT-2.0.0
+ * cmgspack (luarocks install cmsgpack)
+
+
 Synopsis
 ========
 
@@ -27,16 +35,14 @@ Synopsis
 
             local ip = 'xx.xx.xx.xx'
 
-            local my_table = { ip = ip, session = "foo" }
+            -- init with empty values (optional)
+            local my_table = { ip = "", session = "" }
             my_table = cache_table:new(60, ngx.shared.cached_sessions, my_table)
 
             -- load the table from shared_memory
-            local my_table_cached = my_table:load("key")
+            local my_table, cached = my_table:load("key")
 
-            if my_table_cached then
-               my_table = my_table_cached
-            else
-
+            if not cached then
                -- cache MISS, refresh from memc, myslq, etc
                local memcached = require("resty.memcached")
                local memc, err = memcached:new()
