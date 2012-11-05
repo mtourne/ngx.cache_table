@@ -6,11 +6,7 @@ ngx.cache_table - Simple Lua table with a ngx_lua caching layer.
 Description
 ===========
 
-This Lua library adds caching to Lua tables for ngx_lua, and ngx_openresty
-
-http://wiki.nginx.org/HttpLuaModule
-
-https://github.com/agentzh/ngx_openresty
+This Lua library adds caching to Lua tables for [ngx_lua](https://github.com/chaoslawful/lua-nginx-module/), and [ngx_openresty](https://github.com/agentzh/ngx_openresty).
 
 
 Requirements
