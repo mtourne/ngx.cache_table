@@ -91,20 +91,41 @@ when `cache_table:save(key, false)` is called
 
 Common idiom :
 
-    local table = { key = "value" }
+    -- init the table (optional)
+    local table = { value = "" }
     table = cache_table:new(ttl, shared_dict, table)
 
-    local cached_table = table:load(key)
+    local table, cached = table:load(key)
 
+    if not cached then
+       -- fetch from somewhere else
+
+       -- save it
+       table:save(key)
+
+    end
+
+new
+---
+**syntax:** *cached_table = cache_table:new(ttl, ngx.shared.DICT, [opts])*
+
+Create a new cached_table.
+This is a pure Lua table, all the magic lives in the metatable.
+
+`ttl` : default caching ttl
+`ngx.shared.DICT`: lua_shared_dict, defined in ngxinx.conf
+`opts`: optinal table
+
+    * `opts.failed_ttl`: optionaly set a ttl for saving an entry with an empty table
 
 load
 ----
-**syntax:** *cached_table = cache_table:load(key)*
+**syntax:** *cached_table, cached = cache_table:load(key)*
 
 Loads the table from a Ngx shared_memory, using `key`.
 
--- TODO (mtourne): change
-It returns the loaded cached_table full, or `nil`
+Always returns a table. If it was successfully fetched from cache,
+`cached` is true.
 
 
 save
@@ -113,9 +134,9 @@ save
 
 Saves the table from a Ngx shared_memory, using `key`.
 
--- TODO (mtourne): clarify
 By default `good_lookup` is true. Optionally this can be set to false
-to cache "empty_entries using `opts.failed_ttl`
+to cache "empty entries" using `opts.failed_ttl`
+
 
 See Also
 ========
