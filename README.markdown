@@ -114,9 +114,11 @@ This is a pure Lua table, all the magic lives in the metatable.
 
 `ttl` : default caching ttl
 `ngx.shared.DICT`: lua_shared_dict, defined in ngxinx.conf
-`opts`: optinal table
 
-    * `opts.failed_ttl`: optionaly set a ttl for saving an entry with an empty table
+`opts`: optional table
+
+* `opts.failed_ttl`
+    optionaly set a ttl for saving an entry with an empty table
 
 load
 ----
@@ -130,7 +132,7 @@ Always returns a table. If it was successfully fetched from cache,
 
 save
 ----
-**syntax:** *cached_table = cache_table:save(key, good_lookup=true?)*
+**syntax:** *cached_table = cache_table:save(key, [good_lookup=true])*
 
 Saves the table from a Ngx shared_memory, using `key`.
 
