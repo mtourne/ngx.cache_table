@@ -71,54 +71,26 @@ Methods
 
 new
 ---
-**syntax:** *cached_table, err = cache_table:new(ttl, shared_dict, base_table? opts?)*
-
-Creates a cache_table
-
-A cache_table provides methods, but is otherwise a full Lua table. Since it can't change the table itself, cached_table:load() returns a new cache_table
-
-`ttl` caching_time set by save()
-`shared_dict` a ngx.shared.DICT, declared in nginx.conf
-
-If a bad shared_dict (undeclared in nginx.conf), the cache_table can't cache properly
-and `err` will be set in the return
-
-Optionally accepts `base_table`, and an `opts` table argument.
-
-`opts.failed_ttl` will be used as to cache an "empty_entry",
-when `cache_table:save(key, false)` is called
-
-
-Common idiom :
-
-    -- init the table (optional)
-    local table = { value = "" }
-    table = cache_table:new(ttl, shared_dict, table)
-
-    local table, cached = table:load(key)
-
-    if not cached then
-       -- fetch from somewhere else
-
-       -- save it
-       table:save(key)
-
-    end
-
-new
----
-**syntax:** *cached_table = cache_table:new(ttl, ngx.shared.DICT, [opts])*
+**syntax:** *cached_table, err = cache_table:new(ttl, ngx.shared.DICT, [base_table], [opts])*
 
 Create a new cached_table.
 This is a pure Lua table, all the magic lives in the metatable.
 
-`ttl` : default caching ttl
-`ngx.shared.DICT`: lua_shared_dict, defined in ngxinx.conf
+**args**
+`ttl`: caching_time set by save()
+`ngx.shared.DICT`: a ngx.shared.DICT, declared in nginx.conf (lua_shared_dict)
 
-`opts`: optional table
+`base_table`: this can be useful to init all the fields of a table, in the case where load() would fail.
+
+`opts`: option table
 
 * `opts.failed_ttl`
     optionaly set a ttl for saving an entry with an empty table
+
+**returns**
+If a bad shared_dict (undeclared in nginx.conf), the cache_table can't cache properly
+and `err` will be set in the return
+
 
 load
 ----
