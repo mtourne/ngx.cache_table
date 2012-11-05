@@ -20,9 +20,11 @@
 --    and self:load cannot change self itself.
 --    cache_table:load() will always return a new instance.
 
-module("cache_table", package.seeall)
+module(..., package.seeall)
 
 local cmsgpack = require("cmsgpack")
+
+local debug = require("debug")
 
 -- Control caching for failed lookups
 local DEFAULT_FAILED_LOOKUP_CACHE_TTL = 10
@@ -32,7 +34,7 @@ local DEBUG = false
 local pack = cmsgpack.pack
 local unpack = cmsgpack.unpack
 
-local class = cache_table
+local class = _M
 
 -- cache_table:new(ttl, shared_dict, [table], [opts])
 --   shared_dict: a ngx.shared.DICT, declared in nginx.conf
@@ -167,7 +169,8 @@ function _load_off(self, key)
 
    ngx.log(ngx.WARN, 'Unable to load object, check your configuration. ',
            debug.traceback())
-   return nil
+
+   return self, false
 end
 
 function _save_off(self, key)
@@ -177,12 +180,13 @@ function _save_off(self, key)
 
    ngx.log(ngx.WARN, 'Unable to save object, check your configuration. ',
            debug.traceback())
-   return nil
+
+   return self, false
 end
 
 
 -- safety net
 getmetatable(class).__newindex = (
    function (table, key, val)
-      error('attempt to write to undeclared variable "' .. key .. '"')
+      error('Attempt to write to undeclared variable "' .. key .. '"')
    end)
