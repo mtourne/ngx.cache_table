@@ -125,10 +125,26 @@ function load(self, key)
    return self, false
 end
 
--- cache_table:save(key, [lookup_success])
-function save(self, key, lookup_succes)
-   local lookup_succes = lookup_succes or true
+-- cache_table:save(key)
+-- save an entry using the internal ttl
+function save(self, key)
+   local ttl = self:get_internal('ttl')
 
+   return self:save_ttl(key, ttl)
+end
+
+-- cache_table:save_empty(key)
+-- save an empty slot for a shorter period (opts.ttl)
+function save_empty(self, key)
+   local opts = self:get_internal('opts')
+   local ttl = opts.failed_ttl
+
+   return self:save_ttl(key, ttl)
+end
+
+-- cache_table:save_ttl(key, ttl)
+-- save for a given ttl
+function save_ttl(self, key, ttl)
    local serialized = self:serialize(self)
 
    self:set_internal('serialized_size', #serialized)
@@ -138,18 +154,8 @@ function save(self, key, lookup_succes)
 
    local shared_dict = self:get_shared_dict()
 
-   local ttl = DEFAULT_FAILED_LOOKUP_CACHE_TTL
-   if lookup_success then
-      ttl = self:get_internal('ttl')
-   else
-      local opts = self:get_internal('opts')
-      ttl = opts.failed_ttl
-      ngx.log(ngx.DEBUG, 'Failed Lookup TTL: ', ttl)
-   end
-
    return shared_dict:set(key, serialized, ttl)
 end
-
 
 -- default serializer function
 function serialize(self, table)

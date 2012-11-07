@@ -100,12 +100,17 @@ Always returns a table. If it was successfully fetched from cache,
 
 save
 ----
-**syntax:** *cached_table = cache_table:save(key, [good_lookup=true])*
+**syntax:** *cached_table = cache_table:save(key)*
 
 Saves the table from a Ngx shared_memory, using `key`.
 
-By default `good_lookup` is true. Optionally this can be set to false
-to cache "empty entries" using `opts.failed_ttl`
+
+save_empty
+----------
+**syntax:** *cached_table = cache_table:save_empty(key)*
+
+Saves an "empty entry", to avoid performing the lookups too fast.
+The value used for the ttl is `opts.failed_ttl`
 
 
 See Also
