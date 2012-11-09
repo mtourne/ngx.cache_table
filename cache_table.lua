@@ -20,8 +20,6 @@
 --    and self:load cannot change self itself.
 --    cache_table:load() will always return a new instance.
 
-module(..., package.seeall)
-
 local cmsgpack = require("cmsgpack")
 
 local debug = require("debug")
@@ -34,13 +32,13 @@ local DEBUG = false
 local pack = cmsgpack.pack
 local unpack = cmsgpack.unpack
 
-local class = _M
+local cache_table = { }
 
 -- cache_table:new(ttl, shared_dict, [table], [opts])
 --   shared_dict: a ngx.shared.DICT, declared in nginx.conf
 --   ttl: caching time, in seconds.
 --   table: pre-initalized table
-function new(self, ttl, shared_dict, table, opts)
+function cache_table.new(self, ttl, shared_dict, table, opts)
    local err = nil
 
    local opts = opts or {}
@@ -50,7 +48,7 @@ function new(self, ttl, shared_dict, table, opts)
    end
 
    local mt = {
-      __index = class,
+      __index = cache_table,
       __internal = {
          shared_dict = shared_dict,
          ttl = ttl,
@@ -59,7 +57,7 @@ function new(self, ttl, shared_dict, table, opts)
       }
    }
 
-   local table = table or {}
+   table = table or {}
 
    local res =  setmetatable(table, mt)
 
@@ -79,29 +77,29 @@ function new(self, ttl, shared_dict, table, opts)
    return res, err
 end
 
-function get_internal_table(self)
-   local mt = self:getmetatable()
+function cache_table.get_internal_table(self)
+   local mt = getmetatable(self)
    return mt.__internal
 end
 
-function get_internal(self, key)
-   local mt = self:getmetatable()
+function cache_table.get_internal(self, key)
+   local mt = getmetatable(self)
    return mt.__internal[key]
 end
 
-function set_internal(self, key, val)
-   local mt = self:getmetatable()
+function cache_table.set_internal(self, key, val)
+   local mt = getmetatable(self)
    mt.__internal[key] = val
 end
 
-function get_shared_dict(self)
+function cache_table.get_shared_dict(self)
    return self:get_internal('shared_dict')
 end
 
 -- cache_table:load(key)
 -- Loads the table from a shared dict
 -- @returns (loaded table, cached)
-function load(self, key)
+function cache_table.load(self, key)
    local shared_dict = self:get_shared_dict()
    local serialized = shared_dict:get(key)
 
@@ -114,7 +112,7 @@ function load(self, key)
       self:set_internal('serialized_size', #serialized)
       self:set_internal('cache_status', 'HIT')
 
-      local mt = self:getmetatable()
+      local mt = getmetatable(self)
 
       local new_table = self:deserialize(serialized)
       setmetatable(new_table, mt)
@@ -127,7 +125,7 @@ end
 
 -- cache_table:save(key)
 -- save an entry using the internal ttl
-function save(self, key)
+function cache_table.save(self, key)
    local ttl = self:get_internal('ttl')
 
    return self:save_ttl(key, ttl)
@@ -135,7 +133,7 @@ end
 
 -- cache_table:save_empty(key)
 -- save an empty slot for a shorter period (opts.ttl)
-function save_empty(self, key)
+function cache_table.save_empty(self, key)
    local opts = self:get_internal('opts')
    local ttl = opts.failed_ttl
 
@@ -144,7 +142,7 @@ end
 
 -- cache_table:save_ttl(key, ttl)
 -- save for a given ttl
-function save_ttl(self, key, ttl)
+function cache_table.save_ttl(self, key, ttl)
    local serialized = self:serialize(self)
 
    self:set_internal('serialized_size', #serialized)
@@ -158,17 +156,17 @@ function save_ttl(self, key, ttl)
 end
 
 -- default serializer function
-function serialize(self, table)
+function cache_table.serialize(self, table)
    return pack(table)
 end
 
-function deserialize(self, serialized)
+function cache_table.deserialize(self, serialized)
    return unpack(serialized)
 end
 
 
 -- debug functions to turn off caching
-function _load_off(self, key)
+function cache_table._load_off(self, key)
    if DEBUG then
       self.internals = self:get_internal_table()
    end
@@ -179,7 +177,7 @@ function _load_off(self, key)
    return self, false
 end
 
-function _save_off(self, key)
+function cache_table._save_off(self, key)
    if DEBUG then
       self.internals = self:get_internal_table()
    end
@@ -190,9 +188,14 @@ function _save_off(self, key)
    return self, false
 end
 
-
 -- safety net
-getmetatable(class).__newindex = (
-   function (table, key, val)
-      error('Attempt to write to undeclared variable "' .. key .. '"')
-   end)
+local class_mt = {
+   __newindex = (
+      function (table, key, val)
+         error('Attempt to write to undeclared variable "' .. key .. '"')
+      end),
+}
+
+setmetatable(cache_table, class_mt)
+
+return cache_table
