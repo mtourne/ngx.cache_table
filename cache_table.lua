@@ -32,50 +32,12 @@ local DEBUG = false
 local pack = cmsgpack.pack
 local unpack = cmsgpack.unpack
 
+local ngx_log = ngx.log
+local ngx_ERR = ngx.ERR
+
 local cache_table = { }
 
--- cache_table:new(ttl, shared_dict, [table], [opts])
---   shared_dict: a ngx.shared.DICT, declared in nginx.conf
---   ttl: caching time, in seconds.
---   table: pre-initalized table
-function cache_table.new(self, ttl, shared_dict, table, opts)
-   local err = nil
-
-   local opts = opts or {}
-   if not opts.failed_ttl then
-      -- opts.failed_ttl: caching time for ("empty entries"), default 10secs
-      opts.failed_ttl = DEFAULT_FAILED_LOOKUP_CACHE_TTL
-   end
-
-   local mt = {
-      __index = cache_table,
-      __internal = {
-         shared_dict = shared_dict,
-         ttl = ttl,
-         cache_status = 'MISS',
-         opts = opts,
-      }
-   }
-
-   table = table or {}
-
-   local res =  setmetatable(table, mt)
-
-   -- not passing a ngx.shared.DICT turns off all the cache
-   if not shared_dict then
-      if DEBUG then
-         ngx.log(ngx.CRIT, 'Caching is disabled. ', debug.traceback())
-      end
-
-      mt.__internal.cache_status = 'DISABLED'
-      res.save = res._save_off
-      res.load = res._load_off
-
-      err = 'Caching is disabled'
-   end
-
-   return res, err
-end
+local EMPTY_FLAG = 1
 
 function cache_table.get_internal_table(self)
    local mt = getmetatable(self)
@@ -101,18 +63,26 @@ end
 -- @returns (loaded table, cached)
 function cache_table.load(self, key)
    local shared_dict = self:get_shared_dict()
-   local serialized = shared_dict:get(key)
+   local serialized, flags = shared_dict:get(key)
 
    if serialized then
 
+      local mt = getmetatable(self)
+      local internal = mt.__internal
+
       if DEBUG then
-         self:set_internal('serialized', serialized)
+         internal['serialized'] = serialized
       end
 
-      self:set_internal('serialized_size', #serialized)
-      self:set_internal('cache_status', 'HIT')
+      internal['serialized_size'] = #serialized
 
-      local mt = getmetatable(self)
+      local cache_status = 'HIT'
+      if flags and flags == EMPTY_FLAG then
+         -- cached empty
+         cache_status = 'HIT_EMPTY'
+      end
+
+      internal['cache_status'] = cache_status
 
       local new_table = self:deserialize(serialized)
       setmetatable(new_table, mt)
@@ -133,16 +103,18 @@ end
 
 -- cache_table:save_empty(key)
 -- save an empty slot for a shorter period (opts.ttl)
+-- Use a flag in shmem to symbolize EMPTY
 function cache_table.save_empty(self, key)
    local opts = self:get_internal('opts')
    local ttl = opts.failed_ttl
 
-   return self:save_ttl(key, ttl)
+   return self:save_ttl(key, ttl, EMPTY_FLAG)
 end
 
 -- cache_table:save_ttl(key, ttl)
 -- save for a given ttl
-function cache_table.save_ttl(self, key, ttl)
+function cache_table.save_ttl(self, key, ttl, flag)
+   local flag = flag or 0
    local serialized = self:serialize(self)
 
    self:set_internal('serialized_size', #serialized)
@@ -152,7 +124,7 @@ function cache_table.save_ttl(self, key, ttl)
 
    local shared_dict = self:get_shared_dict()
 
-   return shared_dict:set(key, serialized, ttl)
+   return shared_dict:set(key, serialized, ttl, flag)
 end
 
 -- default serializer function
@@ -166,27 +138,76 @@ end
 
 
 -- debug functions to turn off caching
-function cache_table._load_off(self, key)
-   if DEBUG then
-      self.internals = self:get_internal_table()
-   end
-
-   ngx.log(ngx.WARN, 'Unable to load object, check your configuration. ',
+local function _load_off(self, key)
+   ngx_log(ngx_ERR,
+           'Unable to load cache_table, check your lua_shared_dict conf.  ',
            debug.traceback())
 
    return self, false
 end
 
-function cache_table._save_off(self, key)
-   if DEBUG then
-      self.internals = self:get_internal_table()
-   end
-
-   ngx.log(ngx.WARN, 'Unable to save object, check your configuration. ',
+local function _save_off(self, key)
+   ngx_log(ngx_ERR,
+           'Unable to save cache_table, check your lua_shared_dict conf.  ',
            debug.traceback())
 
    return self, false
 end
+
+-- copy cache_table
+local cache_table_no_cache = {}
+
+for k, v in pairs(cache_table) do
+   cache_table_no_cache[k] = v
+end
+
+-- redirect all save, load function to dummy functions
+cache_table_no_cache['load'] = _load_off
+cache_table_no_cache['save_ttl'] = _save_off
+cache_table_no_cache['save'] = _save_off
+cache_table_no_cache['save_empty'] = _save_off
+
+
+-- cache_table:new(ttl, shared_dict, [table], [opts])
+--   shared_dict: a ngx.shared.DICT, declared in nginx.conf
+--   ttl: caching time, in seconds.
+--   table: pre-initalized table
+function cache_table.new(self, ttl, shared_dict, table, opts)
+   local opts = opts or {}
+   if not opts.failed_ttl then
+      -- opts.failed_ttl: caching time for ("empty entries"), default 10secs
+      opts.failed_ttl = DEFAULT_FAILED_LOOKUP_CACHE_TTL
+   end
+
+   local cache_status = 'MISS'
+   local __index = cache_table
+   local err = nil
+
+   if not shared_dict then
+      ngx_log(ngx_ERR, 'Caching is disabled, check your lua_shared_dict conf. ',
+              debug.traceback())
+
+      -- not passing a valid ngx.shared.DICT turns off all the cache
+      cache_status = 'DISABLED'
+      __index = cache_table_no_cache
+      err = 'Caching is disabled'
+   end
+
+   local mt = {
+      __index = __index,
+      __internal = {
+         shared_dict = shared_dict,
+         ttl = ttl,
+         cache_status = cache_status,
+         opts = opts,
+      }
+   }
+
+   table = table or {}
+
+   return setmetatable(table, mt), err
+end
+
 
 -- safety net
 local class_mt = {
