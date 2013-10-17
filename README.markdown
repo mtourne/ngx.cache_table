@@ -1,3 +1,13 @@
+DEPRECATED
+
+Use [ngx.shcache](https://github.com/mtourne/ngx.shcache) instead.
+
+ngx.shcache is a much more general answer to this problem, designed to
+minimize serialization / de-serialization operations and load on the
+external lookup service (redis, memcached, http, ...)
+
+
+
 Name
 ====
 
